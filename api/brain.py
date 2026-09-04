@@ -1,6 +1,6 @@
 import urllib.request, json, time
 
-BINANCE = "https://api1.binance.com"
+COINGECKO = "https://api.coingecko.com/api/v3"
 GAMMA = "https://gamma-api.polymarket.com"
 TOPIC = "praveen-polymarket-bot-2026"
 
@@ -14,20 +14,20 @@ def notify(msg):
 
 def fetch_price():
     try:
-        url = BINANCE + "/api/v3/ticker/price?symbol=BTCUSDT"
+        url = COINGECKO + "/simple/price?ids=bitcoin&vs_currencies=usd"
         r = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
         resp = urllib.request.urlopen(r, timeout=15)
         data = json.loads(resp.read().decode())
-        return float(data["price"])
-    except Exception as e: return None
+        return float(data["bitcoin"]["usd"])
+    except: return None
 
 def fetch_klines():
     try:
-        url = BINANCE + "/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=240"
+        url = COINGECKO + "/coins/bitcoin/ohlc?vs_currency=usd&days=1"
         r = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
         resp = urllib.request.urlopen(r, timeout=15)
         d = json.loads(resp.read().decode())
-        return [{"o":float(k[1]),"h":float(k[2]),"l":float(k[3]),"c":float(k[4]),"v":float(k[5])} for k in d]
+        return [{"o":float(k[1]),"h":float(k[2]),"l":float(k[3]),"c":float(k[4]),"v":0} for k in d]
     except: return None
 
 def fetch_poly():
@@ -87,7 +87,9 @@ def calc_vwap(candles):
     if not candles: return None
     pv = sum((c["h"]+c["l"]+c["c"])/3*c["v"] for c in candles)
     v = sum(c["v"] for c in candles)
-    return pv/v if v > 0 else None
+    if v > 0: return pv/v
+    tp_sum = sum((c["h"]+c["l"]+c["c"])/3 for c in candles)
+    return tp_sum / len(candles) if candles else None
 
 def calc_heiken(candles):
     ha = []
@@ -168,8 +170,8 @@ def run_brain():
         fail = False
         if vw and len(vs_list) >= 3 and len(closes) >= 2 and vs_list[-2]:
             fail = closes[-1] < vw and closes[-2] > vs_list[-2]
-        vr = sum(c["v"] for c in klines[-20:])
-        va = sum(c["v"] for c in klines[-120:]) / 6 if len(klines) >= 120 else None
+        vr = sum(c["v"] for c in klines[-20:]) if any(c["v"] > 0 for c in klines) else None
+        va = (sum(c["v"] for c in klines[-120:]) / 6) if len(klines) >= 120 and any(c["v"] > 0 for c in klines) else None
         crosses = 0
         for i in range(max(1, len(vs_list)-20), len(vs_list)):
             if vs_list[i] and vs_list[i-1]:
