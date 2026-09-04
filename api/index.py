@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import urllib.request
 import json
+from .brain import run_brain
 
 TOPIC = 'praveen-polymarket-bot-2026'
 
@@ -73,10 +74,21 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         arbs, negrisk, weather, signals = scan()
         
+        brain_result = None
+        try:
+            brain_result = run_brain()
+        except Exception as e:
+            brain_result = {"status": "error", "reason": str(e)[:50]}
+        
         summary = 'Scanner: ' + str(arbs) + ' arb, ' + str(negrisk) + ' negrisk, ' + str(weather) + ' weather'
         
         if arbs > 0 or negrisk > 0:
             notify(summary + ' SIGNALS FOUND!')
+        
+        if brain_result and brain_result.get("status") == "ok":
+            dec = brain_result.get("decision", {})
+            if dec.get("action") == "ENTER":
+                notify("BTC BRAIN: " + dec["side"] + " Edge=" + str(round(dec["edge"]*100,1)) + "% " + dec["strength"] + " " + dec["phase"])
         
         response = {
             'status': 'alive',
@@ -84,7 +96,8 @@ class handler(BaseHTTPRequestHandler):
             'negrisk': negrisk,
             'weather': weather,
             'signals': signals[:10],
-            'summary': summary
+            'summary': summary,
+            'btc_brain': brain_result
         }
         
         self.send_response(200)
