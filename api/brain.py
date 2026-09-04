@@ -1,6 +1,6 @@
 import urllib.request, json, time
 
-BINANCE = "https://api.binance.com"
+BINANCE = "https://api1.binance.com"
 GAMMA = "https://gamma-api.polymarket.com"
 TOPIC = "praveen-polymarket-bot-2026"
 
