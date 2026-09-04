@@ -1,8 +1,9 @@
-import urllib.request, json, time
+import urllib.request, json, time, os
 
 COINGECKO = "https://api.coingecko.com/api/v3"
 GAMMA = "https://gamma-api.polymarket.com"
 TOPIC = "praveen-polymarket-bot-2026"
+LOG_FILE = "/tmp/btc_brain_log.json"
 
 def clamp(x, lo, hi): return max(lo, min(hi, x))
 
@@ -11,6 +12,27 @@ def notify(msg):
         r = urllib.request.Request("https://ntfy.sh/" + TOPIC, data=msg.encode(), method="POST")
         urllib.request.urlopen(r, timeout=10)
     except: pass
+
+def log_signal(result):
+    try:
+        logs = []
+        try:
+            with open(LOG_FILE, "r") as f: logs = json.loads(f.read())
+        except: pass
+        entry = {"ts": int(time.time()), "btc": result.get("btc"), "regime": result.get("regime"), "rsi": result.get("rsi"), "model_up": result.get("model_up"), "edge_up": result.get("edge_up"), "decision": result.get("decision")}
+        logs.append(entry)
+        if len(logs) > 500: logs = logs[-500:]
+        with open(LOG_FILE, "w") as f: f.write(json.dumps(logs))
+    except: pass
+
+def get_stats():
+    try:
+        with open(LOG_FILE, "r") as f: logs = json.loads(f.read())
+        enters = [l for l in logs if l.get("decision", {}).get("action") == "ENTER"]
+        ups = len([e for e in enters if e.get("decision", {}).get("side") == "UP"])
+        dns = len([e for e in enters if e.get("decision", {}).get("side") == "DOWN"])
+        return {"total_signals": len(logs), "enter_signals": len(enters), "up_calls": ups, "down_calls": dns}
+    except: return {"total_signals": 0}
 
 def fetch_price():
     try:
@@ -203,9 +225,20 @@ def run_brain():
             eu = (aup - mu_p) if mu_p else None
             ed = (adn - md_p) if md_p else None
         rec = decide(rem, eu, ed, aup, adn)
-        result = {"status": "ok", "btc": round(price, 2), "regime": reg, "rsi": round(r, 1) if r else None, "model_up": round(aup, 3), "model_dn": round(adn, 3), "edge_up": round(eu, 4) if eu else None, "edge_dn": round(ed, 4) if ed else None, "time_left": round(rem, 1), "decision": rec}
+        result = {"status": "ok", "btc": round(price, 2), "regime": reg, "rsi": round(r, 1) if r else None, "model_up": round(aup, 3), "model_dn": round(adn, 3), "edge_up": round(eu, 4) if eu else None, "edge_dn": round(ed, 4) if ed else None, "time_left": round(rem, 1), "decision": rec, "stats": get_stats()}
+        log_signal(result)
         if rec["action"] == "ENTER":
-            notify("BTC BRAIN: " + rec["side"] + " Edge=" + str(round(rec["edge"]*100, 1)) + "% " + rec["strength"] + " " + rec["phase"] + " BTC=$" + str(round(price)) + " " + reg)
+            sig_key = rec["side"] + "_" + rec["phase"] + "_" + str(round(rec["edge"], 2))
+            try:
+                last_file = "/tmp/last_btc_sig.txt"
+                last_sig = ""
+                try:
+                    with open(last_file, "r") as f: last_sig = f.read().strip()
+                except: pass
+                if sig_key != last_sig:
+                    notify("BTC BRAIN: " + rec["side"] + " Edge=" + str(round(rec["edge"]*100, 1)) + "% " + rec["strength"] + " " + rec["phase"] + " BTC=$" + str(round(price)) + " " + reg)
+                    with open(last_file, "w") as f: f.write(sig_key)
+            except: pass
         return result
     except Exception as e:
         return {"status": "error", "reason": str(e)[:100]}
