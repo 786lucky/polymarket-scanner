@@ -1,32 +1,24 @@
 from http.server import BaseHTTPRequestHandler
-import urllib.request
 import json
 from .brain import run_all_brains
-
-TOPIC = 'praveen-polymarket-bot-2026'
-
-def notify(msg):
-    try:
-        req = urllib.request.Request('https://ntfy.sh/' + TOPIC, data=msg.encode(), method='POST')
-        urllib.request.urlopen(req, timeout=10)
-    except: pass
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         brains = run_all_brains()
-        btc = brains.get("btc", {})
-        all_sigs = brains.get("all_signals", [])
         response = {
             'status': 'alive',
             'brains': {
-                'btc': btc,
+                'btc': brains.get('btc'),
+                'whales': brains.get('whales'),
+                'kalshi_arb': brains.get('kalshi_arb'),
+                'fade': brains.get('fade'),
                 'weather': brains.get('weather'),
-                'fed': brains.get('fed'),
-                'negrisk': brains.get('negrisk'),
-                'safe_no': brains.get('safe_no')
+                'fed_negrisk_safeno': brains.get('fed_negrisk_safeno')
             },
-            'all_signals': all_sigs[:20],
-            'signal_count': len(all_sigs)
+            'paper_trades': brains.get('paper_trades', []),
+            'paper_stats': brains.get('paper_stats', {}),
+            'all_signals': brains.get('all_signals', []),
+            'signal_count': brains.get('signal_count', 0)
         }
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
